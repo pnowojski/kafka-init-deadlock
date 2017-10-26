@@ -24,8 +24,6 @@ cache:
 before_cache:
   - rm -rf $HOME/.m2/repository/pl/nowojski
 
-install: true
-
 language: java
 
 env:
@@ -70,7 +68,3 @@ env:
   - TEST=1
   - TEST=1
 
-git:
-  depth: 100
-
-script: "mvn clean install"
