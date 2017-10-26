@@ -18,7 +18,7 @@
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka_2.11</artifactId>
-            <version>0.11.0.1</version>
+            <version>1.0.0</version>
             <scope>test</scope>
         </dependency>
 
@@ -42,6 +42,13 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>staging</id>
+            <url>https://repository.apache.org/content/groups/staging/</url>
+        </repository>
+    </repositories>
 
     <build>
         <plugins>
