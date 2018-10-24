@@ -42,7 +42,7 @@ public class KafkaCommitDeadLockTest {
 
     @Test
     public void testDeadLock() throws Exception {
-        int executions = 10;
+        int executions = 1;
         int writesCount = 10;
 
         String topicName = "kafka-dead-lock";
@@ -61,9 +61,9 @@ public class KafkaCommitDeadLockTest {
         properties.putAll(PROPERTIES);
         properties.put("transactional.id", transactionalId);
 
-        Optional<Integer> failedBrokerId = Optional.empty();
+        try {
+            Producer<String, String> kafkaProducer = new KafkaProducer<>(properties);
 
-        try (Producer<String, String> kafkaProducer = new KafkaProducer<>(properties)) {
             kafkaProducer.initTransactions();
             kafkaProducer.beginTransaction();
             for (int w = 0; w < writesCount; w++) {
@@ -72,26 +72,20 @@ public class KafkaCommitDeadLockTest {
             }
             kafkaProducer.flush();
 
-            try (Producer<String, String> kafkaProducer2 = new KafkaProducer<>(properties)) {
-                kafkaProducer2.initTransactions();
-                kafkaProducer2.beginTransaction();
-                String message = "This shouldn't be visible";
-                kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
+            Producer<String, String> kafkaProducer2 = new KafkaProducer<>(properties);
+            kafkaProducer2.initTransactions();
+            kafkaProducer2.beginTransaction();
+            String message = "This shouldn't be visible";
+            kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
 
-                failedBrokerId = Optional.of(failRandomBroker());
+            failRandomBroker();
 
-                kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
+            kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
 
-                kafkaProducer.commitTransaction();
-            }
+            kafkaProducer.commitTransaction();
         }
         catch (Exception ex) {
             System.err.println(ex);
-        }
-        finally {
-            if (failedBrokerId.isPresent()) {
-                ENVIRONMENT.restartBroker(failedBrokerId.get());
-            }
         }
     }
 
