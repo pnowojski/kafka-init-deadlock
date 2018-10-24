@@ -27,7 +27,7 @@ import org.I0Itec.zkclient.ZkClient;
 import org.apache.commons.io.FileUtils;
 import org.apache.curator.test.TestingServer;
 import org.apache.kafka.common.network.ListenerName;
-import org.apache.kafka.common.protocol.SecurityProtocol;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -275,5 +275,9 @@ public class KafkaTestEnvironment {
 		}
 
 		throw new Exception("Could not start Kafka after " + numTries + " retries due to port conflicts.");
+	}
+
+	public void restartBroker(int brokerId) throws Exception {
+		brokers.set(brokerId, getKafkaServer(brokerId, tmpKafkaDirs.get(brokerId)));
 	}
 }
