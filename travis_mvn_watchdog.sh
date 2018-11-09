@@ -129,26 +129,29 @@ echo "MVN exited with EXIT CODE: ${EXIT_CODE}."
 rm $MVN_PID
 rm $MVN_EXIT
 
-if [ $EXIT_CODE == 0 ]; then
+for i in {1..10}
+do
+    if [ $EXIT_CODE == 0 ]; then
 
-    echo "RUNNING '${MVN_TEST}'."
+        echo "RUNNING '${MVN_TEST}'."
 
-    # Run $MVN_TEST and pipe output to $MVN_OUT for the watchdog. The PID is written to $MVN_PID to
-    # allow the watchdog to kill $MVN if it is not producing any output anymore. $MVN_EXIT contains
-    # the exit code. This is important for Travis' build life-cycle (success/failure).
-    ( $MVN_TEST & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$MVN_PID 4>$MVN_EXIT | tee $MVN_OUT
+        # Run $MVN_TEST and pipe output to $MVN_OUT for the watchdog. The PID is written to $MVN_PID to
+        # allow the watchdog to kill $MVN if it is not producing any output anymore. $MVN_EXIT contains
+        # the exit code. This is important for Travis' build life-cycle (success/failure).
+        ( $MVN_TEST & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$MVN_PID 4>$MVN_EXIT | tee $MVN_OUT
 
-    EXIT_CODE=$(<$MVN_EXIT)
+        EXIT_CODE=$(<$MVN_EXIT)
 
-    echo "MVN exited with EXIT CODE: ${EXIT_CODE}."
+        echo "MVN exited with EXIT CODE: ${EXIT_CODE}."
 
-    rm $MVN_PID
-    rm $MVN_EXIT
-else
-    echo "=============================================================================="
-    echo "Compilation failure detected, skipping test execution."
-    echo "=============================================================================="
-fi
+        rm $MVN_PID
+        rm $MVN_EXIT
+    else
+        echo "=============================================================================="
+        echo "Compilation failure detected, skipping test execution."
+        echo "=============================================================================="
+    fi
+done
 
 # Post
 
