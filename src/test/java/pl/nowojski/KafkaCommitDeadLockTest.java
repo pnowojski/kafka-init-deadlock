@@ -7,6 +7,7 @@ package pl.nowojski;
 import kafka.server.KafkaServer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.internals.TransactionalRequestResult;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.junit.AfterClass;
@@ -69,7 +70,7 @@ public class KafkaCommitDeadLockTest {
                 String message = Integer.toString(w);
                 kafkaProducer1.send(new ProducerRecord<>(topicName, message, message));
             }
-            kafkaProducer1.flush();
+            flush(kafkaProducer1);
 
             KafkaProducer<String, String> kafkaProducer2 = new KafkaProducer<>(getProperties());
 
@@ -79,7 +80,7 @@ public class KafkaCommitDeadLockTest {
                 String message = Integer.toString(w);
                 kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
             }
-            kafkaProducer2.flush();
+            flush(kafkaProducer2);
 
             KafkaProducer<String, String> kafkaProducer3 = new KafkaProducer<>(getProperties());
             kafkaProducer3.initTransactions();
@@ -132,6 +133,29 @@ public class KafkaCommitDeadLockTest {
         }
         toShutDown.shutdown();
         toShutDown.awaitShutdown();
+    }
+
+    private void flush(KafkaProducer<?, ?> kafkaProducer) {
+        kafkaProducer.flush();
+        flushNewPartitions(kafkaProducer);
+    }
+
+    private void flushNewPartitions(KafkaProducer<?, ?> kafkaProducer) {
+        LOG.info("Flushing new partitions");
+        TransactionalRequestResult result = enqueueNewPartitions(kafkaProducer);
+        Object sender = getValue(kafkaProducer, "sender");
+        invoke(sender, "wakeup");
+        result.await();
+    }
+
+    private TransactionalRequestResult enqueueNewPartitions(KafkaProducer<?, ?> kafkaProducer) {
+        Object transactionManager = getValue(kafkaProducer, "transactionManager");
+        synchronized (transactionManager) {
+            Object txnRequestHandler = invoke(transactionManager, "addPartitionsToTransactionHandler");
+            invoke(transactionManager, "enqueueRequest", new Class[]{txnRequestHandler.getClass().getSuperclass()}, new Object[]{txnRequestHandler});
+            TransactionalRequestResult result = (TransactionalRequestResult) getValue(txnRequestHandler, txnRequestHandler.getClass().getSuperclass(), "result");
+            return result;
+        }
     }
 
     private int getNodeId(KafkaProducer<?, ?> kafkaProducer) {
