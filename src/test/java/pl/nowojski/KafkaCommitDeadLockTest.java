@@ -14,7 +14,6 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -56,37 +55,55 @@ public class KafkaCommitDeadLockTest {
 
     private void runSingleExecution(String topicName, int writesCount) throws Exception {
         System.err.println("runSingleExecution");
-        String transactionalId = UUID.randomUUID().toString();
-        Properties properties = new Properties();
-        properties.putAll(PROPERTIES);
-        properties.put("transactional.id", transactionalId);
 
         try {
-            Producer<String, String> kafkaProducer = new KafkaProducer<>(properties);
+            Producer<String, String> kafkaProducer1 = new KafkaProducer<>(getProperties());
 
-            kafkaProducer.initTransactions();
-            kafkaProducer.beginTransaction();
+            kafkaProducer1.initTransactions();
+            kafkaProducer1.beginTransaction();
             for (int w = 0; w < writesCount; w++) {
                 String message = Integer.toString(w);
-                kafkaProducer.send(new ProducerRecord<>(topicName, message, message));
+                kafkaProducer1.send(new ProducerRecord<>(topicName, message, message));
             }
-            kafkaProducer.flush();
+            kafkaProducer1.flush();
 
-            Producer<String, String> kafkaProducer2 = new KafkaProducer<>(properties);
+            Producer<String, String> kafkaProducer2 = new KafkaProducer<>(getProperties());
+
             kafkaProducer2.initTransactions();
             kafkaProducer2.beginTransaction();
+            for (int w = 0; w < writesCount; w++) {
+                String message = Integer.toString(w);
+                kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
+            }
+            kafkaProducer2.flush();
+
+            Producer<String, String> kafkaProducer3 = new KafkaProducer<>(getProperties());
+            kafkaProducer3.initTransactions();
+            kafkaProducer3.beginTransaction();
             String message = "This shouldn't be visible";
-            kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
+            kafkaProducer3.send(new ProducerRecord<>(topicName, message, message));
 
             failRandomBroker();
 
-            kafkaProducer2.send(new ProducerRecord<>(topicName, message, message));
+            kafkaProducer3.send(new ProducerRecord<>(topicName, message, message));
 
-            kafkaProducer.commitTransaction();
+            kafkaProducer1.commitTransaction();
+            kafkaProducer1.close();
+            kafkaProducer2.commitTransaction();
+            kafkaProducer2.close();
+
+            kafkaProducer3.close();
         }
         catch (Exception ex) {
             System.err.println(ex);
         }
+    }
+
+    private Properties getProperties() {
+        Properties properties = new Properties();
+        properties.putAll(PROPERTIES);
+        properties.put("transactional.id", UUID.randomUUID().toString());
+        return properties;
     }
 
     private int failRandomBroker() {
