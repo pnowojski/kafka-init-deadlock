@@ -78,7 +78,6 @@ public class KafkaTestEnvironment {
 		return brokers;
 	}
 
-
 	public void prepare() {
 		File tempDir = new File(System.getProperty("java.io.tmpdir"));
 		tmpZkDir = new File(tempDir, "kafkaITcase-zk-dir-" + (UUID.randomUUID().toString()));

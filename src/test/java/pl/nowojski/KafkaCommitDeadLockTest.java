@@ -6,14 +6,18 @@ package pl.nowojski;
 
 import kafka.server.KafkaServer;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.Node;
+import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -57,7 +61,7 @@ public class KafkaCommitDeadLockTest {
         System.err.println("runSingleExecution");
 
         try {
-            Producer<String, String> kafkaProducer1 = new KafkaProducer<>(getProperties());
+            KafkaProducer<String, String> kafkaProducer1 = new KafkaProducer<>(getProperties());
 
             kafkaProducer1.initTransactions();
             kafkaProducer1.beginTransaction();
@@ -67,7 +71,7 @@ public class KafkaCommitDeadLockTest {
             }
             kafkaProducer1.flush();
 
-            Producer<String, String> kafkaProducer2 = new KafkaProducer<>(getProperties());
+            KafkaProducer<String, String> kafkaProducer2 = new KafkaProducer<>(getProperties());
 
             kafkaProducer2.initTransactions();
             kafkaProducer2.beginTransaction();
@@ -77,13 +81,14 @@ public class KafkaCommitDeadLockTest {
             }
             kafkaProducer2.flush();
 
-            Producer<String, String> kafkaProducer3 = new KafkaProducer<>(getProperties());
+            KafkaProducer<String, String> kafkaProducer3 = new KafkaProducer<>(getProperties());
             kafkaProducer3.initTransactions();
             kafkaProducer3.beginTransaction();
             String message = "This shouldn't be visible";
             kafkaProducer3.send(new ProducerRecord<>(topicName, message, message));
 
-            failRandomBroker();
+            //failRandomBroker();
+            failBroker(getNodeId(kafkaProducer3));
 
             kafkaProducer3.send(new ProducerRecord<>(topicName, message, message));
 
@@ -108,9 +113,62 @@ public class KafkaCommitDeadLockTest {
 
     private int failRandomBroker() {
         KafkaServer toShutDown = ENVIRONMENT.getBrokers().get(RANDOM.nextInt(ENVIRONMENT.getBrokers().size()));
-        int brokerId = toShutDown.config().brokerId();
         toShutDown.shutdown();
         toShutDown.awaitShutdown();
-        return brokerId;
+        return toShutDown.config().brokerId();
+    }
+
+    private void failBroker(int brokerId) {
+        KafkaServer toShutDown = null;
+        for (KafkaServer server : ENVIRONMENT.getBrokers()) {
+            if (server.config().brokerId() == brokerId) {
+                toShutDown = server;
+                break;
+            }
+        }
+
+        if (toShutDown == null) {
+            throw new IllegalArgumentException("Cannot find broker to shut down");
+        }
+        toShutDown.shutdown();
+        toShutDown.awaitShutdown();
+    }
+
+    private int getNodeId(KafkaProducer<?, ?> kafkaProducer) {
+        Object transactionManager = getValue(kafkaProducer, "transactionManager");
+        Node node = (Node) invoke(transactionManager, "coordinator", FindCoordinatorRequest.CoordinatorType.TRANSACTION);
+        return node.id();
+    }
+
+    protected static Object invoke(Object object, String methodName, Object... args) {
+        Class<?>[] argTypes = new Class[args.length];
+        for (int i = 0; i < args.length; i++) {
+            argTypes[i] = args[i].getClass();
+        }
+        return invoke(object, methodName, argTypes, args);
+    }
+
+    private static Object invoke(Object object, String methodName, Class<?>[] argTypes, Object[] args) {
+        try {
+            Method method = object.getClass().getDeclaredMethod(methodName, argTypes);
+            method.setAccessible(true);
+            return method.invoke(object, args);
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException("Incompatible KafkaProducer version", e);
+        }
+    }
+
+    protected static Object getValue(Object object, String fieldName) {
+        return getValue(object, object.getClass(), fieldName);
+    }
+
+    private static Object getValue(Object object, Class<?> clazz, String fieldName) {
+        try {
+            Field field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(object);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Incompatible KafkaProducer version", e);
+        }
     }
 }
