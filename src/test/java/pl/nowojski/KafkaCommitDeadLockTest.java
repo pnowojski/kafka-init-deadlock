@@ -62,7 +62,13 @@ public class KafkaCommitDeadLockTest {
         System.err.println("runSingleExecution");
 
         try {
-            KafkaProducer<String, String> kafkaProducer1 = new KafkaProducer<>(getProperties());
+            for (int i = 0; i < 25; i++) {
+                try (KafkaProducer<String, String> kafkaProducer = new KafkaProducer<>(getProperties(i))) {
+                    kafkaProducer.initTransactions();
+                }
+            }
+
+            KafkaProducer<String, String> kafkaProducer1 = new KafkaProducer<>(getProperties(1));
 
             kafkaProducer1.initTransactions();
             kafkaProducer1.beginTransaction();
@@ -72,7 +78,7 @@ public class KafkaCommitDeadLockTest {
             }
             flush(kafkaProducer1);
 
-            KafkaProducer<String, String> kafkaProducer2 = new KafkaProducer<>(getProperties());
+            KafkaProducer<String, String> kafkaProducer2 = new KafkaProducer<>(getProperties(2));
 
             kafkaProducer2.initTransactions();
             kafkaProducer2.beginTransaction();
@@ -82,7 +88,7 @@ public class KafkaCommitDeadLockTest {
             }
             flush(kafkaProducer2);
 
-            KafkaProducer<String, String> kafkaProducer3 = new KafkaProducer<>(getProperties());
+            KafkaProducer<String, String> kafkaProducer3 = new KafkaProducer<>(getProperties(3));
             kafkaProducer3.initTransactions();
             kafkaProducer3.beginTransaction();
             String message = "This shouldn't be visible";
@@ -98,6 +104,8 @@ public class KafkaCommitDeadLockTest {
             kafkaProducer2.commitTransaction();
             kafkaProducer2.close();
 
+            kafkaProducer3.flush();
+            kafkaProducer3.abortTransaction();
             kafkaProducer3.close();
         }
         catch (Exception ex) {
@@ -105,10 +113,10 @@ public class KafkaCommitDeadLockTest {
         }
     }
 
-    private Properties getProperties() {
+    private Properties getProperties(int transactionalId) {
         Properties properties = new Properties();
         properties.putAll(PROPERTIES);
-        properties.put("transactional.id", UUID.randomUUID().toString());
+        properties.put("transactional.id", String.format("some-transactional-id.%d", transactionalId));
         return properties;
     }
 
